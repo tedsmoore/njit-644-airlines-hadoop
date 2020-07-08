@@ -1,6 +1,4 @@
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.StringTokenizer;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -13,8 +11,6 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-import com.opencsv.CSVReader;
-
 public class AirlineCancellation {
 
     public static class CancelMapper
@@ -25,12 +21,14 @@ public class AirlineCancellation {
 
         public void map(LongWritable key, Text value, Context context
         ) throws IOException, InterruptedException {
+            // skip header row
             if (key.get() == 0 && value.toString().startsWith("Year,Month,DayofMonth")) {
                 return;
             }
 
             String[] record = value.toString().split(",");
 
+            // skip non-canceled flights
             if (record[21].equals("0")) {
                 return;
             }

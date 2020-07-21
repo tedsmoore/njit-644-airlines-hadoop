@@ -64,7 +64,6 @@ public class TaxiTime {
         Job job = Job.getInstance(conf, "cancellation reasons");
         job.setJarByClass(SortDescending.class);
         job.setMapperClass(TaxiTimeMapper.class);
-//        job.setCombinerClass(Reducer.class);
         job.setReducerClass(AvgReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(FloatWritable.class);

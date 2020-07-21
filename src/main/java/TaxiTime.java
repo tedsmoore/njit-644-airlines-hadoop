@@ -2,7 +2,6 @@ import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -15,7 +14,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 public class TaxiTime {
 
-    public static class CancelMapper
+    public static class TaxiTimeMapper
             extends Mapper<LongWritable, Text, Text, FloatWritable> {
 
         private final Text airportOut = new Text();
@@ -63,8 +62,8 @@ public class TaxiTime {
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "cancellation reasons");
-        job.setJarByClass(TaxiTime.class);
-        job.setMapperClass(CancelMapper.class);
+        job.setJarByClass(SortDescending.class);
+        job.setMapperClass(TaxiTimeMapper.class);
 //        job.setCombinerClass(Reducer.class);
         job.setReducerClass(AvgReducer.class);
         job.setOutputKeyClass(Text.class);

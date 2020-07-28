@@ -33,10 +33,15 @@ public class TaxiTime {
 
             airportOut.set(record[16]);
             airportIn.set(record[17]);
-            taxiOut.set(Float.parseFloat(record[20]));
-            taxiIn.set(Float.parseFloat(record[19]));
-            context.write(airportIn, taxiIn);
-            context.write(airportOut, taxiOut);
+
+            if ( !record[20].equals("NA") ) {
+                taxiOut.set(Float.parseFloat(record[20]));
+                context.write(airportOut, taxiOut);
+            }
+            if ( !record[19].equals("NA") ) {
+                taxiIn.set(Float.parseFloat(record[19]));
+                context.write(airportIn, taxiIn);
+            }
 
         }
     }

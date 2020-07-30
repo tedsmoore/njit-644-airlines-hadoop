@@ -18,7 +18,7 @@ public class Probability
             extends Mapper<LongWritable, Text, Text, IntWritable>
     {
         // A broken-up binary result for on time (one) and not (0)
-        private static IntWritable one = new IntWritable(1);
+        private final static IntWritable one = new IntWritable(1);
         private final static IntWritable zero = new IntWritable(0);
 
         // carrier key

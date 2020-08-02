@@ -47,7 +47,7 @@ public class Probability
             int departureDelay = Integer.parseInt(record[15]);
 
             // no delays in arrival or depature, an onTime flight
-            if (arrivalDelay <= 0 && departureDelay <=0) {
+            if (arrivalDelay <= 15 && departureDelay <= 15) {
                 context.write(carrier, one);
                 return;
             }

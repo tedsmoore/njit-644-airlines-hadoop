@@ -66,7 +66,7 @@ public class TaxiTime {
 
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "cancellation reasons");
+        Job job = Job.getInstance(conf, "Taxi Time");
         job.setJarByClass(SortDescending.class);
         job.setMapperClass(TaxiTimeMapper.class);
         job.setReducerClass(AvgReducer.class);

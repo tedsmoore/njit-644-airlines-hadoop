@@ -45,7 +45,7 @@ In 2009, the ASA Data Expo presented an amalgamated data set encompassing the fl
 | 28 | SecurityDelay     | in minutes                                                                                      |
 | 29 | LateAircraftDelay | in minutes                                                                                      |
 
-Note: A flight is considered **delayed** when it arrived 15 or more minutes than the schedule. **Delayed** minutes are calculated for delayed flights only. When multiple causes are assigned to one delayed flight, each cause is prorated based on delayed minutes it is responsible for. The displayed numbers are rounded and may not add up to the total.
+NOTE: A flight is considered **delayed** when it arrived 15 or more minutes than the schedule. **Delayed** minutes are calculated for delayed flights only. When multiple causes are assigned to one delayed flight, each cause is prorated based on delayed minutes it is responsible for. The displayed numbers are rounded and may not add up to the total.
 
 ## Purpose [2]
 
@@ -74,9 +74,55 @@ All of this was to be done on Hadoop-installed virtual machines, hosted on some 
 - `timing*.txt` - Output logs from Hadoop runs including standard out from Hadoop and the results of the time operation for each year
 # Setup
 
-Our cloud platform of choice was Microsoft Azure. We set up three instances: one master, and two workers. 
-The configurations are as detailed:
-**Master:**
+Our cloud platform of choice was Microsoft Azure. 
+
+The Azure set-up consisted of three virtual machines:
+
+A single master node, running the name node service and two workers nodes. All VMs were deployed within a single subnet in an Azure Virtual Network (VNET) and configured with in-bound connectivity for SSH access only to the team.
+
+
+![Virtual Network Connected Devices](https://paper-attachments.dropbox.com/s_C699F1E7857F709239047C9661C4E978A9577D7A7BE9728CC2B0426CDAFFA683_1596387908783_image.png)
+
+
+
+![Virtual Machine Network Security Rules](https://paper-attachments.dropbox.com/s_C699F1E7857F709239047C9661C4E978A9577D7A7BE9728CC2B0426CDAFFA683_1596389104943_image.png)
+
+
+For the initial configuration, we run the jobs with a D2s_v3 VM, which consistents of 2 vCPUs, and 8 GB of memory. The Dv3-series run on Intel® Xeon® Platinum 8272CL (Cascade Lake), Intel® Xeon® 8171M 2.1GHz (Skylake), Intel® Xeon® E5-2673 v4 2.3 GHz (Broadwell), or the Intel® Xeon® E5-2673 v3 2.4 GHz (Haswell) processors in a hyper-threaded configuration. The back-end storage consisted of a 128GB virtual disks, which provided 500 input/output operations per second (IOPS).  While we had sufficient storage to run the full dataset, we noticed that the workload was CPU bound, meaning, that jobs were limited by the 2 vCPUs on the D2_v3 VMs. During the first runs, we noticed that the processors were hitting almost 99% CPU time, which was contributing to significant slow running times.
+
+To improve run-time performance, we took advantage of the dynamic benefits that public cloud provides and resized the worker nodes to FSv2 Virtual Machines.
+
+The [Fsv2-series](https://docs.microsoft.com/en-us/azure/virtual-machines/fsv2-series) run on 2nd Generation Intel® Xeon® Platinum 8272CL (Cascade Lake) processors and Intel® Xeon® Platinum 8168 (Skylake) processors. It features a sustained all core Turbo clock speed of 3.4 GHz and a maximum single-core turbo frequency of 3.7 GHz. Intel® AVX-512 instructions are new on Intel Scalable Processors. These instructions provide up to a 2X performance boost to vector processing workloads on both single and double precision floating point operations. 
+
+Since we were hitting a cap with CPU and computing several calculations, it made logical sense to leverage Virtual Machines that could process large scale calculates much faster. This change resulted in reducing the average run times as indicated by the graph below:
+
+
+![VM CPU Usages](https://paper-attachments.dropbox.com/s_C699F1E7857F709239047C9661C4E978A9577D7A7BE9728CC2B0426CDAFFA683_1596388361058_image.png)
+
+
+Memory usage was fairly low as the dataset is not a typical Big Data sized set:
+
+
+![VM Memory Usage](https://paper-attachments.dropbox.com/s_C699F1E7857F709239047C9661C4E978A9577D7A7BE9728CC2B0426CDAFFA683_1596388490979_image.png)
+
+
+Disk IOPS was also fairly low and never peaked towards the upper limit of the VM disk:
+
+
+![Azure Managed Disk Performance (IOPS)](https://paper-attachments.dropbox.com/s_C699F1E7857F709239047C9661C4E978A9577D7A7BE9728CC2B0426CDAFFA683_1596388572377_image.png)
+
+
+One of the benefits of cloud infrastructure is the ability to deploy Infrastructure as Code. Azure provides the ability to export existing configurations for easy reuse via modifications. The configurations for the Master and Worker nodes are documented below.  Using these configuration files, it is easy to deploy additional worker nodes with the JSON templates below:
+
+An Azure VM can be deployed using the following command with the provided CLI commands:
+
+
+    group deployment create --resource-group hadoop-project-rg-name --template-uri master.json
+    group deployment create --resource-group hadoop-project-rg-name --template-uri worker1.json
+    group deployment create --resource-group hadoop-project-rg-name --template-uri worker2.json
+
+**Master** **Node ARM Template****:**
+
 
     {
         "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
@@ -175,7 +221,8 @@ The configurations are as detailed:
         ]
     }
 
-**Worker 1:**
+**Worker 1** **ARM Template****:**
+
 
     {
         "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
@@ -251,7 +298,8 @@ The configurations are as detailed:
         ]
     }
 
-**Worker 2:**
+**Worker 2** **ARM Template****:**
+
 
     {
         "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
@@ -327,7 +375,7 @@ The configurations are as detailed:
         ]
     }
 
-Once we had these instances configured, our next step was to install Java,  Hadoop, and Yarn. as well as set up our working environments and HDFS using the following commands:
+Once we had these instances configured, our next step was to install Java, Hadoop, and Yarn. as well as set up our working environments and HDFS using the following commands:
 
     # Head Node Set-up
     ssh-keygen -t rsa -P ""
@@ -417,14 +465,20 @@ Once we had these instances configured, our next step was to install Java,  Hado
     # Start-Yarn
     start-yarn.sh
 # Algorithmic Approaches
-## The 3 airlines with the highest and lowest probability, respectively, for being on schedule.
+## The 3 airlines with the highest and lowest probability, respectively, for being on schedule
+
+
     We approached this task by writing a binary `onTime` variable (really we created two `IntWritable` variables: `one` and `zero`) to `context` in the map phase, `1` for on schedule, `0` for delayed. A flight that was delayed 15 minutes or more upon departure and/or on arrival were considered **not** on time. The keys used were the codes for the airline carriers. 
     In the reduce phase, we kept a counter to track the total number of flights by carriers as the denominator, and summed up the binary `onTime` as the numerator, providing the on time probability of each carrier.
     To sort, we created a second **MapReduce** function called `SortDescending`. This simply swaps the key and the values (`value * -1`, to sort from greatest to least) so that the automatic sorting achieves the desired goal, then swaps back the key and value in the reduce phase, returning a sorted list. 
-## The 3 airports with the longest and shortest average taxi time per flight (both in and out), respectively.
+## The 3 airports with the longest and shortest average taxi time per flight (both in and out), respectively
+
+
     This we approached by writing to `context` twice per flight record in the map phase: once for the `T``axi``O``ut` time and once for the `T``axi``I``n` time. Because a flight doesn’t (usually) land at the airport it took off from, this was a necessary step to parse out the relevant data points from the raw data. Since the taxi time calculation is “both in and out” we simply added up all the taxi records for each airport key, and kept a simple counter to create the denominator. The division of these is the final result.
     The sorting again was handled by the `SortDescending` method from the previous task. 
-## The most common reason for flight cancellations.
+## The most common reason for flight cancellations
+
+
     This function was the simplest of the three. We looked at the cancellation code, a binary `0` or `1`, and if it was a canceled flight, we parsed the corresponding reason from the record. As we’re tabulating cancellation reasons, the keys used in the mapping phase were the **4 cancellation codes** (`A` = carrier, `B` = weather, `C` = NAS, `D` = security), as well as an additional value of `N/A`. It appears as if these codes were not collected for several years, so a large number of earlier flights are encoded as `N/A`.
 ## Running the jobs
     To return each job sorted, we implemented the following shell script `mr_sorted.sh` to run the jobs in sequence, where `$1` is the JavaClass:
@@ -463,113 +517,121 @@ Once we had these instances configured, our next step was to install Java,  Hado
 
     This allowed us to recover the runtimes for each incremental set of years from 1987-2008. 
 # Results
-## Goal Metrics
+## Goal Metrics (1987-2008)
 
-Below are the direct answers to the questions in the prompt. The full output of the MapReduce jobs can be seen in `output.txt`
+Below are the direct answers to the questions in the prompt. The full output of the **MapReduce** jobs can be seen in `output.txt`
 
 **The 3 airlines with the highest and lowest probability, respectively, for being on schedule****.**
+Highest Probability: Hawaiian Airlines, Aloha Airlines, Midway Airlines Inc.
 
-Highest Probability: Hawaiian Airlines, Aloha Airlines, Midway Airlines Inc
-1987-2008
-HA        0.9326062
-AQ        0.90286916
-ML (1)        0.84682935
+| HA     | 0.9326062  |
+| ------ | ---------- |
+| AQ     | 0.90286916 |
+| ML (1) | 0.84682935 |
 
 Lowest Probability: Piedmont Aviation, JetBlue Airways, Atlantic Southeast Airlines
-PI        0.74301124
-B6        0.7230906
-EV        0.71170384
 
+| PI | 0.74301124 |
+| -- | ---------- |
+| B6 | 0.7230906  |
+| EV | 0.71170384 |
 
 **The 3 airports with the longest and shortest average taxi time per flight (both in and out), respectively.**
-This data has been recorded since 1995. There are several outliners in this dataset, and for which the taxi time averages don’t move year-over-year, indicating very few or no flights. Another job should be programmed to use the total number of records and exclude from the list if it is less than a given threshold (e.g. < 25).
+**NOTE:** **This data has been recorded since 1995.** 
+There are several outliers in this dateset, and for which the taxi time averages don’t move year-over-year, indicating very few or no flights. Another job should be programmed to use the total number of records and exclude from the list if it is less than a given threshold (e.g. < 25).
 
 Longest Taxi Time (both in/out):  Valdosta Regional, Florence Regional, Gainesville Regional
-CKB        197.85715 (exclude)
-MKK        45.778164 (exclude)
-VLD        22.28021
-FLO        21.845243
-GNV        21.60531
+
+| CKB | 197.85715 (exclude) |
+| --- | ------------------- |
+| MKK | 45.778164 (exclude) |
+| VLD | 22.28021            |
+| FLO | 21.845243           |
+| GNV | 21.60531            |
 
 Shortest Taxi Time (both in/out):  Cheyenne, Scotts Bluff County, Provo Muni (caveat: these probably would not make the cut over a threshold)
-PVU        1.7692307
-BFF        1.3333334
-CYS        1.3333334 
-SKA        0.0 (exclude)
-RCA        0.0 (exclude)
-LBF        0.0 (exclude)
-LAR        0.0 (exclude)
 
+| PVU | 1.7692307     |
+| --- | ------------- |
+| BFF | 1.3333334     |
+| CYS | 1.3333334     |
+| SKA | 0.0 (exclude) |
+| RCA | 0.0 (exclude) |
+| LBF | 0.0 (exclude) |
+| LAR | 0.0 (exclude) |
 
 **The most common reason for flight cancellations.**
-This data is available since 2003.
-
+**NOTE:** **This data has been recorded since 2003.**
 Most Common Cancellation Reason: Carrier (A)
-A        317868.0
-B        267000.0
-C        149060.0
-D        601.0
 
+| A | 317868.0 |
+| - | -------- |
+| B | 267000.0 |
+| C | 149060.0 |
+| D | 601.0    |
 
 ## Performance Measurement Plots
 
 **On-Schedule Probability**
-
 Isolated 22 years execution: 
 Probability -> 2:25
 Sort Descending -> 0:12
 Total ---> 2:37
 
-Incremental years execution:
+**Incremental years execution:**
 
-![](https://paper-attachments.dropbox.com/s_32D868787986BB7F58C581F59CB7F80D209A183315629A2939F9DBDEFC623EFD_1596227983137_image.png)
+![Incremential Execution Time (Years)](https://paper-attachments.dropbox.com/s_32D868787986BB7F58C581F59CB7F80D209A183315629A2939F9DBDEFC623EFD_1596227983137_image.png)
 
 
 In the graph, we have shown the number of cumulative data sets on the X axis as representing the increasing data size (from 1 year to 22 years), and the time it took in minutes and seconds on the Y axis. We can see from the graph that as the number of datasets is increasing the time it takes to processed them is also increasing. We were able to process all 22 datasets within approximately 3 minutes using 8 core nodes.
 
 **Average Taxi Time per Flight**
-
 Isolated 22 years execution: 
 TaxiTime -> 2:37
 Sort Descending -> 0:11
 Total ---> 2:48
 
-Incremental years execution:
+**Incremental years execution:**
 
-![](https://paper-attachments.dropbox.com/s_32D868787986BB7F58C581F59CB7F80D209A183315629A2939F9DBDEFC623EFD_1596228635533_image.png)
+![Incremental Job Execution Time](https://paper-attachments.dropbox.com/s_32D868787986BB7F58C581F59CB7F80D209A183315629A2939F9DBDEFC623EFD_1596228635533_image.png)
 
 
 In the graph, we have shown the number of cumulative data sets on the X axis as representing the increasing data size (from 1 year to 22 years), and the time it took in minutes and seconds on the Y axis. We can see from the graph that as the number of datasets is increasing the time it takes to processed them is also increasing. We were able to process all 22 datasets within approximately 3.5 minutes using 8 core nodes.
 
 **Most Common Reason for Flight Cancellations**
-
 Isolated 22 years execution: 
 AirlineCancellation -> 1:27
 Sort Descending -> 0:11
 Total ---> 1:38
 
-Incremental years execution:
+**Incremental years execution:**
 
 ![](https://paper-attachments.dropbox.com/s_32D868787986BB7F58C581F59CB7F80D209A183315629A2939F9DBDEFC623EFD_1596242109584_image.png)
 
 
 In the graph, we have shown the number of cumulative data sets on the X axis as representing the increasing data size (from 1 year to 22 years), and the time it took in minutes and seconds on the Y axis. We can see from the graph that as the number of datasets is increasing the time it takes to processed them is also increasing. We were able to process all 22 datasets within approximately 8.5 minutes using 2 cores, and 2 minutes using 8 cores.
 
+**Conclusion**
 These results yielded a couple of takeaways. First, we observed that the “Flight Cancellation Reasons” job operates much faster than the others, largely because we were able to skip writing to context in the map phase for all non-canceled flights. This reduced the amount of time needed for writing/reading to disk and reduced the work of the reducer, as there were less key-values pairs sent through.
 
 A second observation is that in all cases, the time required appears to increase linearly with the amount of data. Linear is typically a good thing in the world of run-times, but our intuition was that it might start to taper off once the cost of the overhead was amortized over many years of data.
 
-Finally, our A/B node comparison yielded fascinating results. For the Flight Cancellation job we first ran on two less powerful nodes, notably with 2 CPU cores each. In observing the performance charts in Azure Portal, we discovered that the task was CPU-bound, and we were maxing out intermittently. To account for this we rebooted our workers with much faster, 8-core CPUs, and observed a tremendous increase in performance. While the results still increase linearly, the slope was at about 1/15th of the smaller nodes.
+Finally, our A/B node comparison yielded fascinating results. For the Flight Cancellation job we first ran on two less powerful nodes, notably with 2 CPU cores each. In observing the performance charts in Azure Portal, we discovered that the task was CPU-bound, and we were maxing out intermittently (see image below). To account for this we rebooted our workers with much faster, 8-core CPUs, and observed a tremendous increase in performance. While the results still increase linearly, the slope was at about 1/15th of the smaller nodes (see image above).  
 
 
-![](https://paper-attachments.dropbox.com/s_7D55876785615AF861C1F1D329BCA601CAE62034B1E03EE3A78A0D6867203214_1596379903285_cpu.png)
+![CPU Performance](https://paper-attachments.dropbox.com/s_7D55876785615AF861C1F1D329BCA601CAE62034B1E03EE3A78A0D6867203214_1596379903285_cpu.png)
+
+## Cost Information
+
+While it would have been fairly easy to add additional worker nodes to reduce the run time, we felt that leveraging two nodes with 8 vCPUs was good cost/performance ratio. Our total cost for this job ended up totalling roughly $50 to process all of the data. This includes both the original SKU size (2 vCPU by 8 GB) and the compute optimized SKUs (8 vCPU by 16GB). We were able to gain more than 4X performance gains by only paying less than double the cost. This flexibility allowed our to experiment and run the Hadoop jobs on all of the data.
 
 
-
+![Azure Daily Cost](https://paper-attachments.dropbox.com/s_C699F1E7857F709239047C9661C4E978A9577D7A7BE9728CC2B0426CDAFFA683_1596389500361_image.png)
 
 ## Citations
 1. http://stat-computing.org/dataexpo/2009/the-data.html
 2. https://njit.instructure.com/courses/11885/assignments/59290
 3. https://www.bts.dot.gov/topics/airlines-and-airports/understanding-reporting-causes-flight-delays-and-cancellations
 4. https://web.archive.org/web/20070930184124/http://www.transtats.bts.gov/OT_Delay/OT_DelayCause1.asp
+5. [https://docs.microsoft.com/en-us/azure/virtual-machines/sizes-compute?toc=/azure/virtual-machines/linux/toc.json&bc=/azure/virtual-machines/linux/breadcrumb/toc.json](https://docs.microsoft.com/en-us/azure/virtual-machines/sizes-general)
 
